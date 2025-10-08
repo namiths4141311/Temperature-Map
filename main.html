@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Temperature Comparison Map - Sri Lanka</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+
+<link href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-compare/v0.4.0/mapbox-gl-compare.css" rel="stylesheet" />
+<script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-compare/v0.4.0/mapbox-gl-compare.js"></script>
+
+<style>
+  body, html { margin:0; padding:0; height:100%; font-family: sans-serif; }
+  #comparison-container { position:absolute; top:0; bottom:0; width:100%; }
+  .map { position:absolute; top:0; bottom:0; width:100%; }
+
+  .controls, #info-panel, footer, #legends-container { z-index: 4; }
+
+  .controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: rgba(255,255,255,0.95);
+    padding: 8px;
+    border-radius: 8px;
+    box-shadow: 0 0 8px rgba(0,0,0,0.12);
+    font-size: 13px;
+  }
+  .controls select, .controls button { padding:6px; border-radius:6px; border:1px solid #ccc; cursor:pointer; background:white; }
+  .controls button { font-weight:700; }
+
+  .map-title {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    font-size: 28px;
+    font-weight:700;
+    background: rgba(255,255,255,0.95);
+    padding:6px 10px;
+    border-radius:8px;
+  }
+
+  #legends-container {
+    position:absolute;
+    bottom:50px;
+    left:10px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    z-index:3;
+  }
+  .legend { background:white; padding:8px; border-radius:6px; box-shadow:0 0 6px rgba(0,0,0,0.12); font-size:13px; }
+  .legend div { margin-bottom:6px; display:flex; align-items:center; }
+  .legend span { display:inline-block; width:18px; height:18px; margin-right:8px; border-radius:3px; }
+
+  #info-panel {
+    position:absolute;
+    bottom:20px;
+    right:10px;
+    width:260px;
+    z-index:3;
+    background:rgba(255,255,255,0.95);
+    padding:10px;
+    border-radius:8px;
+    box-shadow:0 0 8px rgba(0,0,0,0.12);
+    font-size:13px;
+  }
+
+  #refresh-bar-container { margin-top:6px; background:#eee; border-radius:6px; width:200px; height:18px; overflow:hidden; }
+  #refresh-bar { height:100%; width:0%; background:#4CAF50; border-radius:6px; transition: width 0.25s; }
+
+  footer {
+    position:absolute;
+    bottom:0;
+    width:100%;
+    text-align:center;
+    background:rgba(255,255,255,0.95);
+    padding:6px;
+    font-size:13px;
+    border-top:1px solid #ddd;
+    z-index:2;
+  }
+</style>
+</head>
+<body>
+
+<div id="comparison-container">
+  <div id="map-left" class="map"></div>
+  <div id="map-right" class="map"></div>
+</div>
+
+<div class="map-title">
+  🌡️ Sri Lanka Temperature Comparison
+  <div style="font-size:12px; font-weight:500; margin-top:4px;">Powered by OpenWeather API & Mapbox</div>
+</div>
+
+<div class="controls" aria-label="map controls">
+  <div style="font-weight:700">Select Years</div>
+  <label style="font-size:12px">Left map:</label>
+  <select id="leftYear">
+    <option value="2020">2020</option>
+    <option value="2021">2021</option>
+    <option value="2022">2022</option>
+    <option value="2023">2023</option>
+    <option value="2024" selected>2024</option>
+  </select>
+
+  <label style="font-size:12px">Right map:</label>
+  <select id="rightYear">
+    <option value="2020">2020</option>
+    <option value="2021" selected>2021</option>
+    <option value="2022">2022</option>
+    <option value="2023">2023</option>
+    <option value="2024">2024</option>
+  </select>
+
+  <button id="force-refresh">🔄 Force refresh points</button>
+  <div id="refresh-bar-container"><div id="refresh-bar"></div></div>
+  <button id="download-csv">⬇️ Points Temperature CSV</button>
+</div>
+
+<div id="legends-container">
+  <div class="legend">
+    <div style="font-weight:700; margin-bottom:6px">Points Temperature Classes</div>
+    <div><span style="background:#2c7bb6"></span> Very Low (&lt;15°C)</div>
+    <div><span style="background:#abd9e9"></span> Low (15–19°C)</div>
+    <div><span style="background:#ffffbf"></span> Average (19–25°C)</div>
+    <div><span style="background:#eea317"></span> High (25–30°C)</div>
+    <div><span style="background:#d7191c"></span> Very High (&ge;30°C)</div>
+  </div>
+
+  <div class="legend">
+    <div style="font-weight:700; margin-bottom:6px">Raster Temperature (°C)</div>
+    <div><span style="background:#fff5eb"></span> 15–17</div>
+    <div><span style="background:#fee6ce"></span> 17–19</div>
+    <div><span style="background:#fdd0a2"></span> 19–21</div>
+    <div><span style="background:#fdae6b"></span> 21–23</div>
+    <div><span style="background:#fd8d3c"></span> 23–25</div>
+    <div><span style="background:#f16913"></span> 25–27</div>
+    <div><span style="background:#d94801"></span> 27–29</div>
+    <div><span style="background:#a63603"></span> 29–31</div>
+    <div><span style="background:#7f2704"></span> 31–33</div>
+    <div><span style="background:#54200f"></span> 33–35</div>
+  </div>
+</div>
+
+<div id="info-panel">
+  <h3 style="margin:0 0 8px 0">🧭 How to use</h3>
+  <ul style="margin:0 0 0 18px; padding:0;">
+    <li>Select two years and drag the center slider to compare.</li>
+    <li>Click any point to view live weather details (OpenWeather).</li>
+    <li>Force refresh updates point temps immediately.</li>
+    <li>Download CSV to export temps per station.</li>
+  </ul>
+</div>
+
+<footer>
+  Developed by <b>Namith Bandara</b>, RMIT University | Data Source: <b>OpenWeather API (2020–2024)</b>
+</footer>
+
+<script>
+
+mapboxgl.accessToken = "pk.eyJ1IjoibmFtaXRoMTIiLCJhIjoiY21jYngzdXpjMDIyODJzc2JrMTRsM2k3ciJ9.RRFk1Zt3EeK75dpT04RsLw";
+const openWeatherKey = "ae371309bb3b85f9c1695c83de986987";
+const refreshInterval = 60;
+let elapsed = 0;
+
+const tempLayers = {
+  "2020": {url:'mapbox://namith12.cs1rv05u', sourceLayer:'Temp2020-10wzxv'},
+  "2021": {url:'mapbox://namith12.3x1491m2', sourceLayer:'Temp2021-141p3y'},
+  "2022": {url:'mapbox://namith12.7cc36ew1', sourceLayer:'2022T-10358t'},
+  "2023": {url:'mapbox://namith12.551aqnt3', sourceLayer:'2023T-80wjim'},
+  "2024": {url:'mapbox://namith12.3bdhkm9k', sourceLayer:'2024T-7kyljn'}
+};
+
+const districtSourceURL = 'mapbox://namith12.crpjner6';
+const districtSourceLayer = 'lka_admbnda_adm2_slsd_2022081-3exets';
+
+const pointsSourceURL = 'mapbox://namith12.2fyj3qaw';
+const pointsSourceLayer = 'Points-2towxj';
+
+async function addPointsAndUpdateColors(map, suffix){
+  const sourceId = 'points-' + suffix;
+  const layerId = 'points-layer-' + suffix;
+
+  if(!map.getSource(sourceId)){
+    map.addSource(sourceId, { type: 'vector', url: pointsSourceURL });
+    map.addLayer({
+      id: layerId,
+      type: 'circle',
+      source: sourceId,
+      'source-layer': pointsSourceLayer,
+      paint: {
+        'circle-radius': 6,
+        'circle-color': '#ff0000',
+        'circle-stroke-color': '#000',
+        'circle-stroke-width': 1
+      }
+    });
+
+    map.on('click', layerId, async (e) => {
+      const f = e.features[0];
+      const [lng, lat] = f.geometry.coordinates;
+      const name = f.properties?.ADM2_EN ?? 'Unknown';
+      try {
+        const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&units=metric&appid=${openWeatherKey}`);
+        const data = await res.json();
+        const html = `<b>📍 ${name}</b><br/>🌡️ Temp: ${data.main?.temp ?? 'N/A'} °C<br/>💧 Humidity: ${data.main?.humidity ?? 'N/A'}%<br/>🌬️ Wind: ${data.wind?.speed ?? 'N/A'} m/s`;
+        new mapboxgl.Popup().setLngLat([lng, lat]).setHTML(html).addTo(map);
+      } catch (err) {
+        new mapboxgl.Popup().setLngLat([lng, lat]).setHTML(`<b>❌ Error loading weather</b>`).addTo(map);
+      }
+    });
+
+    map.on('mouseenter', layerId, () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', layerId, () => map.getCanvas().style.cursor = '');
+  }
+
+  const feats = map.querySourceFeatures(sourceId, { sourceLayer: pointsSourceLayer });
+  for (const f of feats) {
+    const [lng, lat] = f.geometry.coordinates;
+    try {
+      const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&units=metric&appid=${openWeatherKey}`);
+      const d = await res.json();
+      map.setFeatureState({ source: sourceId, sourceLayer: pointsSourceLayer, id: f.id }, { temp: d.main?.temp ?? 0 });
+    } catch (err) {
+      
+    }
+  }
+
+  map.setPaintProperty(layerId, 'circle-color', [
+    'case',
+    ['<', ['feature-state', 'temp'], 15], '#2c7bb6',
+    ['all', ['>=', ['feature-state', 'temp'], 15], ['<', ['feature-state', 'temp'], 20]], '#abd9e9',
+    ['all', ['>=', ['feature-state', 'temp'], 20], ['<', ['feature-state', 'temp'], 25]], '#ffffbf',
+    ['all', ['>=', ['feature-state', 'temp'], 25], ['<', ['feature-state', 'temp'], 30]], '#eea317',
+    ['>=', ['feature-state', 'temp'], 30], '#d7191c',
+    '#ff0000'
+  ]);
+}
+
+function createMap(containerId, initialYear, suffix){
+  const map = new mapboxgl.Map({
+    container: containerId,
+    style: 'mapbox://styles/mapbox/streets-v12',
+    center: [80.5718, 7.9931],
+    zoom: 7
+  });
+
+  map.on('load', () => {
+    const distSource = 'districts-' + suffix;
+    const distFill = 'districts-fill-' + suffix;
+    const distHover = 'districts-hover-' + suffix;
+
+    map.addSource(distSource, { type: 'vector', url: districtSourceURL });
+    map.addLayer({
+      id: distFill,
+      type: 'fill',
+      source: distSource,
+      'source-layer': districtSourceLayer,
+      paint: { 'fill-color': '#888', 'fill-opacity': 0.1 }
+    });
+    map.addLayer({
+      id: distHover,
+      type: 'fill',
+      source: distSource,
+      'source-layer': districtSourceLayer,
+      paint: { 'fill-color': '#000000', 'fill-opacity': 1 },
+      filter: ['==', 'ADM2_EN', '']
+    });
+    map.on('mousemove', distFill, (e) => {
+      if (e.features && e.features.length) map.setFilter(distHover, ['==', 'ADM2_EN', e.features[0].properties.ADM2_EN]);
+    });
+    map.on('mouseleave', distFill, () => map.setFilter(distHover, ['==', 'ADM2_EN', '']));
+
+    const lyr = tempLayers[initialYear];
+    const tempSource = 'temp-' + suffix;
+    const tempFill = 'temp-fill-' + suffix;
+
+    map.addSource(tempSource, { type: 'vector', url: lyr.url });
+    map.addLayer({
+      id: tempFill,
+      type: 'fill',
+      source: tempSource,
+      'source-layer': lyr.sourceLayer,
+      paint: {
+        'fill-color': [
+          'match',
+          ['get', 'gridcode'],
+          1, '#fff5eb', 2, '#fee6ce', 3, '#fdd0a2', 4, '#fdae6b', 5, '#fd8d3c',
+          6, '#f16913', 7, '#d94801', 8, '#a63603', 9, '#7f2704', 10, '#54200f',
+          '#ccc'
+        ],
+        'fill-opacity': 0.7
+      }
+    });
+
+    addPointsAndUpdateColors(map, suffix);
+
+    if (suffix === 'right') {
+      map.addControl(new mapboxgl.ScaleControl({ maxWidth: 200, unit: 'metric' }), 'bottom-right');
+    }
+  });
+
+  return map;
+}
+
+const leftMap = createMap('map-left', '2024', 'left');
+const rightMap = createMap('map-right', '2021', 'right');
+
+const compare = new mapboxgl.Compare(leftMap, rightMap, '#comparison-container', {});
+
+function updateTempLayer(map, year, suffix){
+  const tempSource = 'temp-' + suffix;
+  const tempFill = 'temp-fill-' + suffix;
+  const pointsLayerId = 'points-layer-' + suffix;
+
+  if (map.getLayer(tempFill)) map.removeLayer(tempFill);
+  if (map.getSource(tempSource)) map.removeSource(tempSource);
+
+  const lyr = tempLayers[year];
+  map.addSource(tempSource, { type: 'vector', url: lyr.url });
+
+  if (map.getLayer(pointsLayerId)) {
+    map.addLayer({
+      id: tempFill,
+      type: 'fill',
+      source: tempSource,
+      'source-layer': lyr.sourceLayer,
+      paint: {
+        'fill-color': [
+          'match',
+          ['get', 'gridcode'],
+          1, '#fff5eb', 2, '#fee6ce', 3, '#fdd0a2', 4, '#fdae6b', 5, '#fd8d3c',
+          6, '#f16913', 7, '#d94801', 8, '#a63603', 9, '#7f2704', 10, '#54200f',
+          '#ccc'
+        ],
+        'fill-opacity': 0.7
+      }
+    }, pointsLayerId);
+  } else {
+    map.addLayer({
+      id: tempFill,
+      type: 'fill',
+      source: tempSource,
+      'source-layer': lyr.sourceLayer,
+      paint: {
+        'fill-color': [
+          'match',
+          ['get', 'gridcode'],
+          1, '#fff5eb', 2, '#fee6ce', 3, '#fdd0a2', 4, '#fdae6b', 5, '#fd8d3c',
+          6, '#f16913', 7, '#d94801', 8, '#a63603', 9, '#7f2704', 10, '#54200f',
+          '#ccc'
+        ],
+        'fill-opacity': 0.7
+      }
+    });
+  }
+}
+
+document.getElementById('leftYear').addEventListener('change', (e) => updateTempLayer(leftMap, e.target.value, 'left'));
+document.getElementById('rightYear').addEventListener('change', (e) => updateTempLayer(rightMap, e.target.value, 'right'));
+
+document.getElementById('force-refresh').addEventListener('click', () => {
+  addPointsAndUpdateColors(leftMap, 'left');
+  addPointsAndUpdateColors(rightMap, 'right');
+  elapsed = 0;
+});
+
+setInterval(() => {
+  addPointsAndUpdateColors(leftMap, 'left');
+  addPointsAndUpdateColors(rightMap, 'right');
+}, refreshInterval * 1000);
+
+setInterval(() => {
+  elapsed++;
+  const progress = Math.min(100, (elapsed / refreshInterval) * 100);
+  document.getElementById('refresh-bar').style.width = progress + '%';
+  if (elapsed >= refreshInterval) elapsed = 0;
+}, 1000);
+
+document.getElementById('download-csv').addEventListener('click', async () => {
+  const leftYear = document.getElementById('leftYear').value;
+  const rightYear = document.getElementById('rightYear').value;
+  const rows = [['Latitude','Longitude','District','Temp (°C)']];
+
+  const leftFeatures = leftMap.querySourceFeatures('points-left', { sourceLayer: pointsSourceLayer });
+
+  for (const lf of leftFeatures) {
+    const [lng, lat] = lf.geometry.coordinates;
+    const district = lf.properties?.ADM2_EN ?? 'Unknown';
+    try {
+      const pLeft = fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&units=metric&appid=${openWeatherKey}`).then(r=>r.json());
+      const pRight = fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&units=metric&appid=${openWeatherKey}`).then(r=>r.json());
+      const [dLeft, dRight] = await Promise.all([pLeft, pRight]);
+      const leftTemp = dLeft?.main?.temp ?? 'N/A';
+      const rightTemp = dRight?.main?.temp ?? 'N/A';
+      rows.push([lat, lng, district, rightTemp]);
+    } catch (err) {
+      rows.push([lat, lng, district, rightYear, 'Error']);
+    }
+  }
+
+  const csv = rows.map(r => r.map(c => {
+    if (typeof c === 'string' && (c.includes(',') || c.includes('"'))) {
+      return `"${c.replace(/"/g, '""')}"`;
+    }
+    return c;
+  }).join(',')).join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `srilanka_temps_${leftYear}_vs_${rightYear}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+</script>
+</body>
+</html>
